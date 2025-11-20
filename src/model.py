@@ -26,12 +26,18 @@ class InferenceModel(object):
         conf = probs[pred_index]
         # Implement Monitoring Performance untuk Setiap inputan yang ada
         ## Uncertainty Sampling -> Uncertainty Score
-        # is_uncertain, uncertainty_score = self.uncertainty_detection(probs)
-        is_uncertain, uncertainty_score = 0, 0
+        is_uncertain, uncertainty_score = self.uncertainty_detection(probs)
+        # is_uncertain, uncertainty_score = 0, 0
         return prediction, conf, is_uncertain, uncertainty_score
     
     def uncertainty_detection(self, probs: np.array):
-        pass
+        probs = probs.tolist()
+        probs = sorted(probs, reverse=True)
+        most_conf = probs[0]
+        next_most_conf = probs[1]
+        uncertainty_score = float(1 - (most_conf - next_most_conf))
+        is_uncertain = 1 if uncertainty_score > self.uncertainty_threshold else 0
+        return is_uncertain, uncertainty_score
     
     def predict(self, text: str) -> dict:
         preprocessed_text = self.preprocess(text=text) # [[input_preprocess]]
