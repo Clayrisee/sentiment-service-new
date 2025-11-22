@@ -1,6 +1,7 @@
 # Implement dynamo_db -> pertemuan 5
 import boto3
 import uuid
+import pandas as pd
 from .utils import convert_floats_to_decimals
 from loguru import logger
 
@@ -29,3 +30,23 @@ class UncertaintyDynamoDB:
             logger.info(f"Write Event Success. Response:{response}")
         except Exception as e:
             logger.error(f"Error write event. Error: {e}")
+
+    def fetch_data(self) -> pd.DataFrame:
+        try:
+            logger.info(f"Fetching data from Table: {self.table_name}")
+            items = []
+            response = self.uncertainty_table.scan()
+            items.extend(response.get('Items', []))
+
+            # Handle pagination
+            while 'LastEvaluatedKey' in response:
+                response = self.uncertainty_table.scan(
+                    ExclusiveStartKey=response['LastEvaluatedKey']
+                )
+                items.extend(response.get('Items', []))
+
+            logger.info(f"Fetched {len(items)} items from Table: {self.table_name}")
+            return pd.DataFrame(items)
+        except Exception as e:
+            logger.error(f"Error fetching data. Error: {e}")
+            return pd.DataFrame()
