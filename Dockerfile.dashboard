@@ -1,0 +1,21 @@
+FROM python:3.8
+
+WORKDIR /app
+
+COPY requirements.txt /app/
+COPY src /app/src/
+
+RUN pip install -r requirements.txt
+
+ENV AWS_ACCESS_KEY_ID=None
+ENV AWS_SECRET_ACCESS_KEY=None
+ENV AWS_DEFAULT_REGION="ap-southeast-1"
+
+COPY streamlit_dashboard.py /app/
+COPY run_dashboard.sh /app/
+
+RUN chmod +x run_dashboard.sh
+
+EXPOSE 8501
+
+CMD ["./run_dashboard.sh"]

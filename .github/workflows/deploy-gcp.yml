@@ -11,12 +11,10 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-southeast1
   REPOSITORY: class
-  IMAGE_NAME: sentiment
-  SERVICE_NAME: sentiment-app
 
 jobs:
   build-and-push:
-    name: Build and Push to Artifact Registry
+    name: Build and Push Images to Artifact Registry
     runs-on: ubuntu-latest
 
     permissions:
@@ -42,19 +40,32 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      - name: Build Docker image
+      # Build and push sentiment API image
+      - name: Build Sentiment API Docker image
         run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker tag ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment:${{ github.sha }} .
+          docker tag ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment:${{ github.sha }} \
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment:latest
 
-      - name: Push Docker image to Artifact Registry
+      - name: Push Sentiment API Docker image
         run: |
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment:latest
 
-  deploy:
-    name: Deploy to Cloud Run
+      # Build and push dashboard image
+      - name: Build Dashboard Docker image
+        run: |
+          docker build -f Dockerfile.dashboard -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment-dashboard:${{ github.sha }} .
+          docker tag ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment-dashboard:${{ github.sha }} \
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment-dashboard:latest
+
+      - name: Push Dashboard Docker image
+        run: |
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment-dashboard:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment-dashboard:latest
+
+  deploy-api:
+    name: Deploy Sentiment API to Cloud Run
     needs: build-and-push
     runs-on: ubuntu-latest
 
@@ -74,10 +85,10 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Deploy to Cloud Run
+      - name: Deploy Sentiment API to Cloud Run
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          gcloud run deploy sentiment-app \
+            --image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment:${{ github.sha }} \
             --platform=managed \
             --region=${{ env.REGION }} \
             --port=8000 \
@@ -86,7 +97,45 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars=AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}",AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
 
-      - name: Show deployed URL
+      - name: Show Sentiment API URL
         run: |
-          echo "Service deployed successfully!"
-          gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)'
+          echo "Sentiment API deployed successfully!"
+          gcloud run services describe sentiment-app --region=${{ env.REGION }} --format='value(status.url)'
+
+  deploy-dashboard:
+    name: Deploy Dashboard to Cloud Run
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Deploy Dashboard to Cloud Run
+        run: |
+          gcloud run deploy sentiment-dashboard \
+            --image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/sentiment-dashboard:${{ github.sha }} \
+            --platform=managed \
+            --region=${{ env.REGION }} \
+            --port=8501 \
+            --cpu=1 \
+            --memory=2Gi \
+            --allow-unauthenticated \
+            --set-env-vars=AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}",AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Show Dashboard URL
+        run: |
+          echo "Dashboard deployed successfully!"
+          gcloud run services describe sentiment-dashboard --region=${{ env.REGION }} --format='value(status.url)'

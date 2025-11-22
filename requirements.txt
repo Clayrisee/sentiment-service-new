@@ -8,4 +8,6 @@ loguru
 nltk
 mangum
 boto3
-loguru
+streamlit
+matplotlib
+pandas
